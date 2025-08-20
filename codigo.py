@@ -49,6 +49,15 @@ if uploaded_file is not None:
 
         # Asignar X (características) y y (variable objetivo)
         # Se excluye la columna objetivo para X
+        # X = df.drop(columns=[target_column])
+        # y = df[target_column]
+        # Eliminar filas con valores NaN en la variable objetivo
+        # df.dropna(subset=[target_column], inplace=True)
+        # X = df.drop(columns=[target_column])
+        # y = df[target_column]
+
+        # Rellenar valores NaN con la moda (valor más frecuente)
+        df[target_column].fillna(df[target_column].mode()[0], inplace=True)
         X = df.drop(columns=[target_column])
         y = df[target_column]
 
