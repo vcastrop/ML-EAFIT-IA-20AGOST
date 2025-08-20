@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.naive_bayes import GaussianNB
-from sklearn.svm import SVC # Nuevo modelo: Support Vector Classifier
-from sklearn.linear_model import LogisticRegression # Nuevo modelo: Regresión Logística
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -22,46 +21,47 @@ st.set_page_config(
 
 st.title("Aplicación Interactiva de Modelos de ML Supervisados 🚀")
 st.markdown("""
-Esta aplicación te permite generar un conjunto de datos simulado, realizar un análisis exploratorio,
+Esta aplicación te permite **subir tu propio archivo CSV**, realizar un análisis exploratorio,
 entrenar varios modelos de clasificación supervisada y comparar sus rendimientos.
 """)
 
-# --- Controles de Generación de Datos en el Sidebar ---
-st.sidebar.header("Generación de Datos Simulados")
-n_samples = st.sidebar.slider("Número de Muestras", min_value=100, max_value=2000, value=300, step=50)
-n_features = st.sidebar.slider("Número de Columnas (Características)", min_value=2, max_value=10, value=6, step=1)
-n_classes = st.sidebar.slider("Número de Clases", min_value=2, max_value=5, value=2, step=1)
-random_state_data = st.sidebar.number_input("Semilla Aleatoria para Datos", value=42, step=1)
+# --- Carga de Datos CSV ---
+st.sidebar.header("Carga tu Conjunto de Datos")
+uploaded_file = st.sidebar.file_uploader("Elige un archivo CSV", type="csv")
 
-# --- Generación del conjunto de datos simulado ---
-@st.cache_data
-def generate_simulated_data(n_samples, n_features, n_classes, random_state):
-    """
-    Genera un conjunto de datos simulado para tareas de clasificación.
-    """
-    X, y = make_classification(
-        n_samples=n_samples,
-        n_features=n_features,
-        n_informative=min(n_features, n_features - 1), # Asegura al menos una característica informativa
-        n_redundant=max(0, n_features - min(n_features, n_features - 1) - 1),
-        n_repeated=0,
-        n_classes=n_classes,
-        n_clusters_per_class=1,
-        class_sep=1.0,
-        random_state=random_state,
-        flip_y=0.01
-    )
-    feature_names = [f"Característica_{i+1}" for i in range(X.shape[1])]
-    df = pd.DataFrame(X, columns=feature_names)
-    df['Clase'] = y
-    return df, X, y
+# Comprobamos si se ha subido un archivo
+if uploaded_file is not None:
+    try:
+        df = pd.read_csv(uploaded_file)
+        st.success("¡Archivo cargado exitosamente!")
 
-# Generar los datos
-df, X, y = generate_simulated_data(n_samples, n_features, n_classes, random_state_data)
+        st.subheader("1. Vista Previa del Conjunto de Datos Cargado")
+        st.write(f"Conjunto de datos cargado con **{df.shape[0]}** filas y **{df.shape[1]}** columnas.")
+        st.dataframe(df.head())
 
-st.subheader("1. Vista Previa del Conjunto de Datos Simulado")
-st.write(f"Conjunto de datos generado con **{df.shape[0]}** muestras y **{df.shape[1]-1}** características.")
-st.dataframe(df.head()) # Mostrar las primeras filas del DataFrame
+        # --- Selección de la Variable Objetivo (Clase) ---
+        st.sidebar.markdown("---")
+        st.sidebar.header("Configuración del Conjunto de Datos")
+        target_column = st.sidebar.selectbox(
+            "Selecciona la columna que representa la variable objetivo (Clase):",
+            df.columns
+        )
+
+        # Asignar X (características) y y (variable objetivo)
+        X = df.drop(columns=[target_column])
+        y = df[target_column]
+
+        # Validar si hay suficientes clases para clasificación
+        if y.nunique() < 2:
+            st.error("La columna seleccionada no tiene al menos dos clases únicas. Por favor, elige una columna diferente.")
+            st.stop()
+
+    except Exception as e:
+        st.error(f"Error al leer el archivo. Asegúrate de que sea un archivo CSV válido. Error: {e}")
+        st.stop() # Detiene la ejecución si hay un error
+else:
+    st.info("Por favor, sube un archivo CSV para comenzar. Los modelos y gráficos se mostrarán aquí.")
+    st.stop() # Detiene la ejecución si no hay archivo subido
 
 # --- División de los datos en conjuntos de entrenamiento y prueba ---
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
@@ -74,17 +74,16 @@ st.markdown("#### Estadísticas Descriptivas")
 st.dataframe(df.describe())
 
 st.markdown("#### Matriz de Correlación")
-# Excluir la columna 'Clase' para la correlación de características
 fig_corr, ax_corr = plt.subplots(figsize=(10, 8))
-sns.heatmap(df.drop('Clase', axis=1).corr(), annot=True, cmap='coolwarm', fmt=".2f", ax=ax_corr)
+sns.heatmap(X.corr(), annot=True, cmap='coolwarm', fmt=".2f", ax=ax_corr)
 plt.title("Matriz de Correlación entre Características")
 st.pyplot(fig_corr)
 
 st.markdown("#### Distribución de Características")
 selected_features_for_hist = st.multiselect(
     "Selecciona características para ver su distribución:",
-    options=df.columns[:-1].tolist(),
-    default=df.columns[0:min(3, df.shape[1]-1)].tolist() # Selecciona las primeras 3 por defecto
+    options=X.columns.tolist(),
+    default=X.columns[0:min(3, X.shape[1])].tolist()
 )
 if selected_features_for_hist:
     for feature in selected_features_for_hist:
@@ -96,23 +95,26 @@ if selected_features_for_hist:
         st.pyplot(fig_hist)
 
 st.markdown("#### Gráfico de Dispersión Interactivo (Primeras dos características)")
-st.write("Visualización de las dos primeras características principales por clase.")
-fig_scatter, ax_scatter = plt.subplots(figsize=(10, 8))
-sns.scatterplot(
-    x=df.iloc[:, 0], # Primera característica
-    y=df.iloc[:, 1], # Segunda característica
-    hue=df['Clase'],
-    palette='viridis',
-    marker='o',
-    s=100,
-    edgecolor='k',
-    ax=ax_scatter
-)
-plt.title(f"Dispersión de '{df.columns[0]}' vs '{df.columns[1]}' por Clase")
-plt.xlabel(df.columns[0])
-plt.ylabel(df.columns[1])
-st.pyplot(fig_scatter)
-
+st.write("Visualización de las dos primeras características numéricas principales por clase.")
+numeric_cols = X.select_dtypes(include=np.number).columns.tolist()
+if len(numeric_cols) >= 2:
+    fig_scatter, ax_scatter = plt.subplots(figsize=(10, 8))
+    sns.scatterplot(
+        x=df[numeric_cols[0]],
+        y=df[numeric_cols[1]],
+        hue=df[target_column],
+        palette='viridis',
+        marker='o',
+        s=100,
+        edgecolor='k',
+        ax=ax_scatter
+    )
+    plt.title(f"Dispersión de '{numeric_cols[0]}' vs '{numeric_cols[1]}' por Clase")
+    plt.xlabel(numeric_cols[0])
+    plt.ylabel(numeric_cols[1])
+    st.pyplot(fig_scatter)
+else:
+    st.warning("No hay suficientes características numéricas para el gráfico de dispersión.")
 
 # --- Selección de Modelo y Parámetros ---
 st.markdown("---")
@@ -122,7 +124,7 @@ st.sidebar.header("Configuración de Modelos ML")
 model_choices = st.sidebar.multiselect(
     "Selecciona 1 a 5 Modelos de Clasificación:",
     ["K-Nearest Neighbors (KNN)", "Árbol de Decisión", "Clasificador Bayesiano Gausiano", "Support Vector Machine (SVM)", "Regresión Logística"],
-    default=["K-Nearest Neighbors (KNN)", "Árbol de Decisión"] # Modelos por defecto
+    default=["K-Nearest Neighbors (KNN)", "Árbol de Decisión"]
 )
 
 models = {}
@@ -173,7 +175,7 @@ for model_name in model_choices:
             if model_name == "Árbol de Decisión":
                 with st.expander("Ver Visualización del Árbol de Decisión"):
                     fig_tree, ax_tree = plt.subplots(figsize=(20, 15))
-                    plot_tree(model, filled=True, feature_names=df.columns[:-1].tolist(), class_names=[str(c) for c in sorted(df['Clase'].unique())], ax=ax_tree, fontsize=8)
+                    plot_tree(model, filled=True, feature_names=X.columns.tolist(), class_names=[str(c) for c in sorted(y.unique())], ax=ax_tree, fontsize=8)
                     st.pyplot(fig_tree)
 
             metrics_results.append({
@@ -197,7 +199,7 @@ if metrics_results:
     st.markdown("#### Gráfico de Comparación de Exactitud")
     fig_comp, ax_comp = plt.subplots(figsize=(10, 6))
     sns.barplot(x=comparison_df.index, y="Exactitud", data=comparison_df, palette="viridis", ax=ax_comp)
-    plt.ylim(0, 1) # La exactitud va de 0 a 1
+    plt.ylim(0, 1)
     plt.title("Comparación de Exactitud de los Modelos")
     plt.ylabel("Exactitud")
     plt.xlabel("Modelo")
@@ -208,4 +210,4 @@ else:
     st.warning("Selecciona al menos un modelo para ver la comparación.")
 
 st.markdown("---")
-st.markdown("¡Gracias por usar esta aplicación interactiva de ML!")
+st.markdown("¡Gracias por usar esta aplicación interactiva!")
