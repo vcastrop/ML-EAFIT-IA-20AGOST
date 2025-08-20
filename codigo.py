@@ -48,6 +48,7 @@ if uploaded_file is not None:
         )
 
         # Asignar X (características) y y (variable objetivo)
+        # Se excluye la columna objetivo para X
         X = df.drop(columns=[target_column])
         y = df[target_column]
 
@@ -74,25 +75,36 @@ st.markdown("#### Estadísticas Descriptivas")
 st.dataframe(df.describe())
 
 st.markdown("#### Matriz de Correlación")
-fig_corr, ax_corr = plt.subplots(figsize=(10, 8))
-sns.heatmap(X.corr(), annot=True, cmap='coolwarm', fmt=".2f", ax=ax_corr)
-plt.title("Matriz de Correlación entre Características")
-st.pyplot(fig_corr)
+# Selecciona solo las columnas numéricas para el cálculo de la correlación
+numeric_df = X.select_dtypes(include=np.number)
+if not numeric_df.empty and len(numeric_df.columns) > 1:
+    fig_corr, ax_corr = plt.subplots(figsize=(10, 8))
+    sns.heatmap(numeric_df.corr(), annot=True, cmap='coolwarm', fmt=".2f", ax=ax_corr)
+    plt.title("Matriz de Correlación entre Características Numéricas")
+    st.pyplot(fig_corr)
+else:
+    st.warning("No hay suficientes columnas numéricas para mostrar la matriz de correlación.")
 
+st.markdown("---")
 st.markdown("#### Distribución de Características")
+# Obtiene solo las columnas numéricas para la selección
+numeric_cols = X.select_dtypes(include=np.number).columns.tolist()
 selected_features_for_hist = st.multiselect(
     "Selecciona características para ver su distribución:",
-    options=X.columns.tolist(),
-    default=X.columns[0:min(3, X.shape[1])].tolist()
+    options=numeric_cols,
+    default=numeric_cols[0:min(3, len(numeric_cols))] if numeric_cols else []
 )
 if selected_features_for_hist:
     for feature in selected_features_for_hist:
         fig_hist, ax_hist = plt.subplots(figsize=(8, 5))
-        sns.histplot(df[feature], kde=True, ax=ax_hist, color='skyblue')
+        sns.histplot(X[feature], kde=True, ax=ax_hist, color='skyblue')
         plt.title(f"Distribución de {feature}")
         plt.xlabel(feature)
         plt.ylabel("Frecuencia")
         st.pyplot(fig_hist)
+else:
+    st.info("No hay características numéricas para graficar histogramas.")
+
 
 st.markdown("#### Gráfico de Dispersión Interactivo (Primeras dos características)")
 st.write("Visualización de las dos primeras características numéricas principales por clase.")
@@ -115,6 +127,7 @@ if len(numeric_cols) >= 2:
     st.pyplot(fig_scatter)
 else:
     st.warning("No hay suficientes características numéricas para el gráfico de dispersión.")
+
 
 # --- Selección de Modelo y Parámetros ---
 st.markdown("---")
