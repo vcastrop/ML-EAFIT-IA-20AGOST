@@ -208,4 +208,4 @@ else:
     st.warning("Selecciona al menos un modelo para ver la comparación.")
 
 st.markdown("---")
-st.markdown("¡Gracias por usar esta aplicación interactiva de ML!)
+st.markdown("¡Gracias por usar esta aplicación interactiva de ML!")
